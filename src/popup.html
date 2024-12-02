@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 300px;
+      padding: 16px;
+      font-family: system-ui;
+    }
+    .status {
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .status.active {
+      background: #e3f9e5;
+      color: #276749;
+    }
+    .status.inactive {
+      background: #fed7d7;
+      color: #9b2c2c;
+    }
+    .stats {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #FB7299;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+  </style>
+</head>
+<body>
+  <div class="status">
+    <span>插件状态: <span id="status">检查中...</span></span>
+    <label class="switch">
+      <input type="checkbox" id="toggleFilter">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div class="status">
+    <span>隐藏导航栏: <span id="hideNavStatus">关闭</span></span>
+    <label class="switch">
+      <input type="checkbox" id="toggleNav">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div class="stats">
+    已处理视频: <span id="processedCount">0</span><br>
+    已过滤视频: <span id="filteredCount">0</span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

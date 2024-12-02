@@ -1,0 +1,53 @@
+.filtered-comment {
+  display: none !important;
+}
+
+.quality-score {
+  font-size: 12px;
+  color: #999;
+  margin-left: 8px;
+  background: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* 添加过滤器状态指示器 */
+.comment-filter-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(251, 114, 153, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  z-index: 9999;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.filtered-video {
+  display: none !important;
+}
+
+.video-quality-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: white;
+  font-size: 12px;
+  z-index: 2;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.video-quality-badge.hidden {
+  display: none !important;
+}
+
+.hide-nav .bili-header__channel {
+  display: none !important;
+} 

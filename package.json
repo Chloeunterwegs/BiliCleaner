@@ -1,0 +1,25 @@
+{
+  "scripts": {
+    "build": "webpack --config webpack.config.js",
+    "watch": "webpack --watch --config webpack.config.js",
+    "dev": "webpack --mode development",
+    "prod": "webpack --mode production",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.xxx",
+    "@types/jest": "^29.x.x",
+    "@types/node": "^22.10.1",
+    "copy-webpack-plugin": "^11.x.x",
+    "css-loader": "^6.x.x",
+    "jest": "^29.x.x",
+    "mini-css-extract-plugin": "^2.x.x",
+    "sharp": "^0.33.5",
+    "ts-jest": "^29.x.x",
+    "ts-loader": "^9.x.x",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.x.x",
+    "webpack": "^5.x.x",
+    "webpack-cli": "^5.x.x"
+  }
+}
