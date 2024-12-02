@@ -165,73 +165,162 @@ async function initializeLikeRatioThreshold() {
   }
 }
 
-// 添加关键词设置的初始化函数
+// 添加保存成功提示函数的定义
+function showSaveSuccess() {
+  const toast = document.createElement('div');
+  toast.className = 'save-success';
+  toast.textContent = '保存成功';
+  document.body.appendChild(toast);
+  
+  // 2秒后移除提示
+  setTimeout(() => {
+    toast.remove();
+  }, 2000);
+}
+
+// 统一的标签创建函数
+function createKeywordTag(
+  keyword: string, 
+  container: HTMLElement, 
+  type: 'title' | 'author' | 'partition' | 'whitelist'
+) {
+  const tag = document.createElement('div');
+  tag.className = 'keyword-tag';
+  tag.innerHTML = `
+    ${keyword}
+    <span class="remove">×</span>
+  `;
+  
+  tag.querySelector('.remove')?.addEventListener('click', async () => {
+    // 从DOM中移除标签
+    tag.remove();
+    
+    // 获取剩余的关键词
+    const remainingKeywords = Array.from(container.querySelectorAll('.keyword-tag'))
+      .map(tag => tag.textContent?.replace('×', '').trim())
+      .filter(Boolean)
+      .join(',');
+    
+    // 保存到storage
+    await chrome.storage.local.set({ [`${type}Keywords`]: remainingKeywords });
+    
+    // 通知content script
+    const tabs = await chrome.tabs.query({ 
+      active: true, 
+      currentWindow: true,
+      url: "*://*.bilibili.com/*"
+    });
+
+    if (tabs[0]?.id) {
+      try {
+        await chrome.tabs.sendMessage(tabs[0].id, { 
+          type: 'UPDATE_KEYWORDS',
+          target: type,
+          value: remainingKeywords
+        });
+        showSaveSuccess();
+      } catch (error) {
+        console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
+      }
+    }
+  });
+  
+  container.appendChild(tag);
+}
+
+// 统一的关键词输入处理函数
+function setupKeywordInput(
+  input: HTMLInputElement, 
+  container: HTMLElement, 
+  type: 'title' | 'author' | 'partition' | 'whitelist'
+) {
+  input.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const keyword = input.value.trim();
+      if (keyword) {
+        createKeywordTag(keyword, container, type);
+        input.value = '';
+
+        // 获取所有关键词并保存
+        const allKeywords = Array.from(container.querySelectorAll('.keyword-tag'))
+          .map(tag => tag.textContent?.replace('×', '').trim())
+          .filter(Boolean)
+          .join(',');
+
+        await chrome.storage.local.set({ [`${type}Keywords`]: allKeywords });
+
+        // 通知content script
+        const tabs = await chrome.tabs.query({ 
+          active: true, 
+          currentWindow: true,
+          url: "*://*.bilibili.com/*"
+        });
+
+        if (tabs[0]?.id) {
+          try {
+            await chrome.tabs.sendMessage(tabs[0].id, { 
+              type: 'UPDATE_KEYWORDS',
+              target: type,
+              value: allKeywords
+            });
+            showSaveSuccess();
+          } catch (error) {
+            console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
+          }
+        }
+      }
+    }
+  });
+}
+
+// 修改关键词初始化函数
 async function initializeKeywordsFilter() {
-  const { titleKeywords = '', authorKeywords = '' } = await chrome.storage.local.get(['titleKeywords', 'authorKeywords']);
+  const { 
+    titleKeywords = '', 
+    authorKeywords = '',
+    partitionKeywords = '',
+    whitelistKeywords = ''
+  } = await chrome.storage.local.get([
+    'titleKeywords', 
+    'authorKeywords', 
+    'partitionKeywords',
+    'whitelistKeywords'
+  ]);
   
+  // 初始化标题关键词
   const titleInput = document.getElementById('titleKeywords') as HTMLInputElement;
+  const titleTags = document.getElementById('titleTags');
+  if (titleInput && titleTags) {
+    const keywords = titleKeywords.split(',').filter((k: string) => k.trim());
+    keywords.forEach((keyword: string) => createKeywordTag(keyword.trim(), titleTags, 'title'));
+    setupKeywordInput(titleInput, titleTags, 'title');
+  }
+
+  // 初始化作者关键词
   const authorInput = document.getElementById('authorKeywords') as HTMLInputElement;
-  
-  if (titleInput) {
-    titleInput.value = titleKeywords;
-  }
-  if (authorInput) {
-    authorInput.value = authorKeywords;
-  }
-
-  // 添加标题关键词保存按钮事件监听
-  const saveTitleBtn = document.getElementById('saveTitleKeywords');
-  if (saveTitleBtn) {
-    saveTitleBtn.addEventListener('click', async () => {
-      const keywords = titleInput.value.trim();
-      await chrome.storage.local.set({ titleKeywords: keywords });
-      
-      // 通知内容脚本更新关键词
-      const tabs = await chrome.tabs.query({ 
-        active: true, 
-        currentWindow: true,
-        url: "*://*.bilibili.com/*"
-      });
-
-      if (tabs[0]?.id) {
-        try {
-          await chrome.tabs.sendMessage(tabs[0].id, { 
-            type: 'UPDATE_KEYWORDS',
-            target: 'title',
-            value: keywords
-          });
-        } catch (error) {
-          console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
-        }
-      }
-    });
+  const authorTags = document.getElementById('authorTags');
+  if (authorInput && authorTags) {
+    const keywords = authorKeywords.split(',').filter((k: string) => k.trim());
+    keywords.forEach((keyword: string) => createKeywordTag(keyword.trim(), authorTags, 'author'));
+    setupKeywordInput(authorInput, authorTags, 'author');
   }
 
-  // 添加作者关键词保存按钮事件监听
-  const saveAuthorBtn = document.getElementById('saveAuthorKeywords');
-  if (saveAuthorBtn) {
-    saveAuthorBtn.addEventListener('click', async () => {
-      const keywords = authorInput.value.trim();
-      await chrome.storage.local.set({ authorKeywords: keywords });
-      
-      // 通知内容脚本更新关键词
-      const tabs = await chrome.tabs.query({ 
-        active: true, 
-        currentWindow: true,
-        url: "*://*.bilibili.com/*"
-      });
+  // 初始化分区关键词
+  const partitionInput = document.getElementById('partitionKeywords') as HTMLInputElement;
+  const partitionTags = document.getElementById('partitionTags');
+  if (partitionInput && partitionTags) {
+    const keywords = partitionKeywords.split(',').filter((k: string) => k.trim());
+    keywords.forEach((keyword: string) => createKeywordTag(keyword.trim(), partitionTags, 'partition'));
+    setupKeywordInput(partitionInput, partitionTags, 'partition');
+  }
 
-      if (tabs[0]?.id) {
-        try {
-          await chrome.tabs.sendMessage(tabs[0].id, { 
-            type: 'UPDATE_KEYWORDS',
-            target: 'author',
-            value: keywords
-          });
-        } catch (error) {
-          console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
-        }
-      }
-    });
+  // 初始化白名单关键词
+  const whitelistInput = document.getElementById('whitelistKeywords') as HTMLInputElement;
+  const whitelistTags = document.getElementById('whitelistTags');
+  if (whitelistInput && whitelistTags) {
+    const keywords = whitelistKeywords.split(',').filter((k: string) => k.trim());
+    keywords.forEach((keyword: string) => createKeywordTag(keyword.trim(), whitelistTags, 'whitelist'));
+    setupKeywordInput(whitelistInput, whitelistTags, 'whitelist');
   }
 } 

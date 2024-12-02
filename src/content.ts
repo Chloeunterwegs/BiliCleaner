@@ -11,6 +11,8 @@ let visibleCardCount = 0;
 let likeRatioThreshold = 0.03; // 默认3%
 let titleKeywords: string[] = [];
 let authorKeywords: string[] = [];
+let partitionKeywords: string[] = [];
+let whitelistKeywords: string[] = [];
 
 // 添加更新统计函数
 async function updateStats(isFiltered: boolean) {
@@ -34,6 +36,19 @@ async function updateStats(isFiltered: boolean) {
 
 // 添加新的过滤规则
 function shouldHideContent(element: Element): boolean {
+  // 首先检查白名单
+  const whitelistTitleEl = element.querySelector('.bili-video-card__info--tit');
+  if (whitelistTitleEl && whitelistKeywords.length > 0) {
+    const title = whitelistTitleEl.textContent || '';
+    if (whitelistKeywords.some(keyword => title.includes(keyword))) {
+      console.log(`${DEBUG_PREFIX} 标题包含白名单关键词，保留:`, {
+        标题: title,
+        匹配关键词: whitelistKeywords.find(keyword => title.includes(keyword))
+      });
+      return false;
+    }
+  }
+
   // 检查数据属性
   if (element.getAttribute('data-v-fb1914c6')) {
     return true;
@@ -125,6 +140,33 @@ function shouldHideContent(element: Element): boolean {
     const author = authorEl.textContent || '';
     if (authorKeywords.some(keyword => author.includes(keyword))) {
       console.log(`${DEBUG_PREFIX} 作者包含关键词，已过滤:`, author);
+      return true;
+    }
+  }
+
+  // 检查分区关键词
+  const partitionEl = element.querySelector('.bili-video-card__info--partition, .bili-video-card__info--area');
+  if (partitionEl && partitionKeywords.length > 0) {
+    const partition = partitionEl.textContent?.trim() || '';
+    const title = element.querySelector('.bili-video-card__info--tit')?.textContent?.trim() || '未知标题';
+    const author = element.querySelector('.bili-video-card__info--author')?.textContent?.trim() || '未知UP主';
+
+    // 无论是否匹配都输出分区信息
+    console.log(`${DEBUG_PREFIX} 视频分区检查:`, {
+      标题: title,
+      UP主: author,
+      分区: partition,
+      当前过滤分区: partitionKeywords,
+      是否被过滤: partitionKeywords.some(keyword => partition.includes(keyword))
+    });
+
+    if (partitionKeywords.some(keyword => partition.includes(keyword))) {
+      console.log(`${DEBUG_PREFIX} 分区匹配，已过滤:`, {
+        标题: title,
+        UP主: author,
+        分区: partition,
+        匹配关键词: partitionKeywords.find(keyword => partition.includes(keyword))
+      });
       return true;
     }
   }
@@ -519,8 +561,8 @@ async function init() {
   likeRatioThreshold = threshold / 100; // 转换为小数
 
   // 初始化关键词
-  const { titleKeywords: title = '', authorKeywords: author = '' } = 
-    await chrome.storage.local.get(['titleKeywords', 'authorKeywords']);
+  const { titleKeywords: title = '', authorKeywords: author = '', partitionKeywords: partition = '', whitelistKeywords: whitelist = '' } = 
+    await chrome.storage.local.get(['titleKeywords', 'authorKeywords', 'partitionKeywords', 'whitelistKeywords']);
   
   titleKeywords = title.split(',')
     .map((k: string) => k.trim())
@@ -529,6 +571,8 @@ async function init() {
   authorKeywords = author.split(',')
     .map((k: string) => k.trim())
     .filter((k: string) => k);
+  partitionKeywords = partition.split(',').map((k: string) => k.trim()).filter((k: string) => k);
+  whitelistKeywords = whitelist.split(',').map((k: string) => k.trim()).filter((k: string) => k);
 }
 
 // 监听来自 popup 的消
@@ -645,10 +689,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (message.target === 'author') {
       authorKeywords = message.value.split(',').map((k: string) => k.trim()).filter((k: string) => k);
       console.log(`${DEBUG_PREFIX} 作者关键词已更新:`, authorKeywords);
+    } else if (message.target === 'partition') {
+      partitionKeywords = message.value.split(',').map((k: string) => k.trim()).filter((k: string) => k);
+      console.log(`${DEBUG_PREFIX} 分区关键词已更新:`, partitionKeywords);
+      processAllVideoCards();
+      sendResponse({ success: true });
+    } else if (message.target === 'whitelist') {
+      whitelistKeywords = message.value.split(',').map((k: string) => k.trim()).filter((k: string) => k);
+      console.log(`${DEBUG_PREFIX} 白名单关键词已更新:`, whitelistKeywords);
+      processAllVideoCards();
+      sendResponse({ success: true });
     }
-    // 重新处理所有视频
-    processAllVideoCards();
-    sendResponse({ success: true });
   }
   return true;
 });

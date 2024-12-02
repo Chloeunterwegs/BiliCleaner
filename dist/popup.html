@@ -89,6 +89,70 @@
       border: 1px solid #ddd;
       border-radius: 4px;
     }
+    .keyword-input {
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 8px;
+    }
+    .keyword-container {
+      width: 100%;
+    }
+    .keyword-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .keyword-tag {
+      background: #FB7299;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      animation: tagAppear 0.3s ease-out;
+    }
+    @keyframes tagAppear {
+      from {
+        transform: scale(0.8);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    .keyword-tag .remove {
+      cursor: pointer;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .keyword-tag .remove:hover {
+      opacity: 1;
+    }
+    .keyword-tag .remove:active {
+      transform: scale(0.9);
+    }
+    .save-success {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      animation: fadeOut 2s forwards;
+      pointer-events: none;
+    }
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      70% { opacity: 1; }
+      100% { opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -113,17 +177,33 @@
     </span>
     <button id="saveLikeRatio" class="save-btn">保存</button>
   </div>
-  <div class="status">
-    <span>标题关键词: 
-      <input type="text" id="titleKeywords" placeholder="用逗号分隔" style="width: 120px;">
-    </span>
-    <button id="saveTitleKeywords" class="save-btn">保存</button>
+  <div class="status keyword-input">
+    <span>标题关键词:</span>
+    <div class="keyword-container">
+      <div class="keyword-tags" id="titleTags"></div>
+      <input type="text" id="titleKeywords" placeholder="输入后按回车添加" style="width: 120px;">
+    </div>
   </div>
-  <div class="status">
-    <span>作者关键词: 
-      <input type="text" id="authorKeywords" placeholder="用逗号分隔" style="width: 120px;">
-    </span>
-    <button id="saveAuthorKeywords" class="save-btn">保存</button>
+  <div class="status keyword-input">
+    <span>作者关键词:</span>
+    <div class="keyword-container">
+      <div class="keyword-tags" id="authorTags"></div>
+      <input type="text" id="authorKeywords" placeholder="输入后按回车添加" style="width: 120px;">
+    </div>
+  </div>
+  <div class="status keyword-input">
+    <span>分区关键词:</span>
+    <div class="keyword-container">
+      <div class="keyword-tags" id="partitionTags"></div>
+      <input type="text" id="partitionKeywords" placeholder="输入后按回车添加" style="width: 120px;">
+    </div>
+  </div>
+  <div class="status keyword-input">
+    <span>白名单关键词:</span>
+    <div class="keyword-container">
+      <div class="keyword-tags" id="whitelistTags"></div>
+      <input type="text" id="whitelistKeywords" placeholder="输入后按回车添加" style="width: 120px;">
+    </div>
   </div>
   <div class="stats">
     已处理视频: <span id="processedCount">0</span><br>
