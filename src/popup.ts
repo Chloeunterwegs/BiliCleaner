@@ -114,6 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 初始化点赞比设置
   await initializeLikeRatioThreshold();
   await initializeKeywordsFilter();
+  await initializeReplySettings();
 });
 
 // 添加状态更新函数
@@ -322,5 +323,83 @@ async function initializeKeywordsFilter() {
     const keywords = whitelistKeywords.split(',').filter((k: string) => k.trim());
     keywords.forEach((keyword: string) => createKeywordTag(keyword.trim(), whitelistTags, 'whitelist'));
     setupKeywordInput(whitelistInput, whitelistTags, 'whitelist');
+  }
+}
+
+// 添加新的初始化函数
+async function initializeReplySettings() {
+  // 初始化评论率阈值
+  const { replyRatioThreshold = 1 } = await chrome.storage.local.get('replyRatioThreshold');
+  const replyInput = document.getElementById('replyRatioThreshold') as HTMLInputElement;
+  if (replyInput) {
+    replyInput.value = replyRatioThreshold.toString();
+  }
+
+  // 初始化热评开关
+  const { enableHotReply = false } = await chrome.storage.local.get('enableHotReply');
+  const hotReplyToggle = document.getElementById('toggleHotReply') as HTMLInputElement;
+  const hotReplyStatus = document.getElementById('hotReplyStatus');
+  
+  if (hotReplyToggle) {
+    hotReplyToggle.checked = enableHotReply;
+    updateHotReplyStatus(enableHotReply);
+  }
+
+  // 添加评论率保存按钮事件
+  const saveReplyBtn = document.getElementById('saveReplyRatio');
+  if (saveReplyBtn) {
+    saveReplyBtn.addEventListener('click', async () => {
+      const newThreshold = parseFloat(replyInput.value);
+      if (isNaN(newThreshold) || newThreshold < 0 || newThreshold > 100) {
+        alert('请输入0-100之间的有效数值');
+        return;
+      }
+      
+      await chrome.storage.local.set({ replyRatioThreshold: newThreshold });
+      
+      const tabs = await chrome.tabs.query({ 
+        active: true, 
+        currentWindow: true,
+        url: "*://*.bilibili.com/*"
+      });
+      
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { 
+          type: 'UPDATE_REPLY_RATIO_THRESHOLD',
+          value: newThreshold
+        });
+      }
+      
+      showSaveSuccess();
+    });
+  }
+
+  // 添加热评开关事件
+  hotReplyToggle?.addEventListener('change', async () => {
+    const enabled = hotReplyToggle.checked;
+    await chrome.storage.local.set({ enableHotReply: enabled });
+    updateHotReplyStatus(enabled);
+    
+    const tabs = await chrome.tabs.query({ 
+      active: true, 
+      currentWindow: true,
+      url: "*://*.bilibili.com/*"
+    });
+    
+    if (tabs[0]?.id) {
+      chrome.tabs.sendMessage(tabs[0].id, { 
+        type: 'TOGGLE_HOT_REPLY',
+        enabled
+      });
+    }
+  });
+}
+
+// 添加状态更新函数
+function updateHotReplyStatus(enabled: boolean) {
+  const statusEl = document.getElementById('hotReplyStatus');
+  if (statusEl) {
+    statusEl.textContent = enabled ? '开启' : '关闭';
+    statusEl.style.color = enabled ? '#276749' : '#9b2c2c';
   }
 } 

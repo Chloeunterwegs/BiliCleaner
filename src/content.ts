@@ -13,6 +13,8 @@ let titleKeywords: string[] = [];
 let authorKeywords: string[] = [];
 let partitionKeywords: string[] = [];
 let whitelistKeywords: string[] = [];
+let replyRatioThreshold = 0.01; // 默认1%
+let enableHotReply = false;
 
 // 添加更新统计函数
 async function updateStats(isFiltered: boolean) {
@@ -35,7 +37,7 @@ async function updateStats(isFiltered: boolean) {
 }
 
 // 添加新的过滤规则
-function shouldHideContent(element: Element): boolean {
+async function shouldHideContent(element: Element): Promise<boolean> {
   // 首先检查白名单
   const whitelistTitleEl = element.querySelector('.bili-video-card__info--tit');
   if (whitelistTitleEl && whitelistKeywords.length > 0) {
@@ -171,6 +173,38 @@ function shouldHideContent(element: Element): boolean {
     }
   }
 
+  // 在所有规则检查完后，最后检查评论率和热评
+  const link = element.querySelector('a[href*="/video/"]')?.getAttribute('href');
+  if (!link) return true;
+
+  const bvMatch = link.match(/\/video\/(BV[\w]+)/);
+  if (!bvMatch) return true;
+
+  const stats = await getCommentStats(bvMatch[1]);
+  if (!stats) return true;
+
+  // 评论率检查
+  const hasEnoughReplyRatio = stats.replyRatio >= replyRatioThreshold;
+  
+  // 热评检查（如果启用）
+  const hasEnoughHotReplies = !enableHotReply || stats.hotReplyCount >= 1;
+
+  // 两个条件都满足才显示
+  const shouldShow = hasEnoughReplyRatio && hasEnoughHotReplies;
+  
+  if (!shouldShow) {
+    console.log(`${DEBUG_PREFIX} 视频未达到评论指标，已过滤:`, {
+      标题: element.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
+      播放量: stats.viewCount,
+      评论数: stats.replyCount,
+      评论率: `${(stats.replyRatio * 100).toFixed(2)}%`,
+      热评数: stats.hotReplyCount,
+      评论率达标: hasEnoughReplyRatio,
+      热评达标: hasEnoughHotReplies
+    });
+    return true;
+  }
+
   return false;
 }
 
@@ -284,55 +318,116 @@ async function isQualityVideo(element: Element): Promise<boolean> {
   return passQuality;
 }
 
-// 修改视频处理函数
+// 添加新的接口定义
+interface CommentStats {
+  replyCount: number;
+  viewCount: number;
+  replyRatio: number;
+  hotReplyCount: number;
+}
+
+// 修改 getCommentStats 函数
+async function getCommentStats(bvid: string): Promise<CommentStats | null> {
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  while (retryCount < maxRetries) {
+    try {
+      // 添加随机延迟避免频繁请求
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 1000));
+      
+      // 获取视频基础信息
+      const videoResponse = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+      if (!videoResponse.ok) {
+        throw new Error(`视频信息请求失败: ${videoResponse.status}`);
+      }
+      
+      const videoData = await videoResponse.json();
+      if (videoData.code !== 0) {
+        throw new Error(`获取视频信息失败: ${videoData.message}`);
+      }
+
+      // 获取评论区信息
+      const commentResponse = await fetch(`https://api.bilibili.com/x/v2/reply?type=1&oid=${videoData.data.aid}&pn=1&ps=20`);
+      if (!commentResponse.ok) {
+        throw new Error(`评论请求失败: ${commentResponse.status}`);
+      }
+      
+      const commentData = await commentResponse.json();
+      if (commentData.code !== 0) {
+        throw new Error(`获取评论失败: ${commentData.message}`);
+      }
+
+      // 统计热评数量（回复数>20的评论）
+      const hotReplyCount = commentData.data.replies?.filter(
+        (reply: any) => reply.rcount > 20
+      ).length || 0;
+
+      const stats: CommentStats = {
+        replyCount: videoData.data.stat.reply,
+        viewCount: videoData.data.stat.view,
+        replyRatio: videoData.data.stat.reply / videoData.data.stat.view,
+        hotReplyCount
+      };
+
+      return stats;
+
+    } catch (error) {
+      retryCount++;
+      console.warn(`${DEBUG_PREFIX} 获取评论数据失败 (尝试 ${retryCount}/${maxRetries}):`, error);
+      
+      if (retryCount === maxRetries) {
+        console.error(`${DEBUG_PREFIX} 达到最大重试次数，放弃获取评论数据`);
+        return null;
+      }
+      
+      // 指数退避
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+    }
+  }
+
+  return null;
+}
+
+// 修改 processVideoCard 函数
 async function processVideoCard(element: Element) {
-  // 如果已经处理过，直接返回
   if (element.hasAttribute('data-processed')) {
     return;
   }
   element.setAttribute('data-processed', 'true');
 
-  // 1. 首先检查是否是需要直接过滤的内容（广告、番剧等）
-  if (shouldHideContent(element)) {
+  const shouldHide = await shouldHideContent(element);
+  if (shouldHide) {
     element.classList.add('filtered-video');
-    return; // 如果是广告等内容，直接返回，不需要检查点赞比
-  }
-
-  // 2. 然后检查点赞比
-  const link = element.querySelector('a[href*="/video/"]')?.getAttribute('href');
-  if (!link) {
-    element.classList.add('filtered-video'); // 如果获取不到链接，也隐藏
     return;
   }
+
+  // 获取视频链接和标题
+  const link = element.querySelector('a[href*="/video/"]')?.getAttribute('href');
+  const title = element.querySelector('.bili-video-card__info--tit')?.textContent?.trim();
   
+  if (!link || !title) {
+    return;
+  }
+
   const bvid = link.match(/\/video\/(BV[\w]+)/)?.[1];
   if (!bvid) {
-    element.classList.add('filtered-video');
     return;
   }
 
-  const metrics = await getVideoMetrics(bvid);
-  if (!metrics) {
-    element.classList.add('filtered-video');
-    return;
-  }
-
-  // 计算点赞率并判断
-  const likeRatio = metrics.like / metrics.view;
+  // 获取评论统计数据
+  const stats = await getCommentStats(bvid);
   
-  // 输出视频数据
-  console.log(`${DEBUG_PREFIX} 视频数据:`, {
-    标题: element.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
-    UP主: element.querySelector('.bili-video-card__info--author')?.textContent?.trim(),
-    播放量: metrics.view.toLocaleString(),
-    点赞数: metrics.like.toLocaleString(),
-    点赞率: `${(likeRatio * 100).toFixed(2)}%`,
-    通过筛选: likeRatio >= likeRatioThreshold ? '✅' : '❌'
-  });
-
-  if (likeRatio < likeRatioThreshold) {
-    console.log(`${DEBUG_PREFIX} 低于${(likeRatioThreshold * 100).toFixed(1)}%，予以隐藏`);
-    element.classList.add('filtered-video');
+  if (stats) {
+    // 输出详细信息到控制台
+    console.log(`${DEBUG_PREFIX} 视频数据分析:`, {
+      标题: title,
+      播放量: stats.viewCount.toLocaleString(),
+      评论数: stats.replyCount.toLocaleString(),
+      评论率: `${(stats.replyRatio * 100).toFixed(4)}%`,
+      热评数量: `${stats.hotReplyCount}条`,
+      链接: `https://www.bilibili.com/video/${bvid}`
+    });
   }
 }
 
@@ -455,10 +550,11 @@ function observeVideoList() {
 const videoObserver = new MutationObserver((mutations) => {
   mutations.forEach(mutation => {
     if (mutation.type === 'childList') {
-      mutation.addedNodes.forEach((node) => {
+      mutation.addedNodes.forEach(async (node) => {
         if (node instanceof HTMLElement) {
           // 1. 处理当前节点
-          if (shouldHideContent(node)) {
+          const shouldHide = await shouldHideContent(node);
+          if (shouldHide) {
             node.classList.add('filtered-video');
             return;
           }
@@ -472,7 +568,8 @@ const videoObserver = new MutationObserver((mutations) => {
             card.setAttribute('data-processed', 'true');
 
             // 先检查是否需要直接隐藏
-            if (shouldHideContent(card)) {
+            const shouldHideCard = await shouldHideContent(card);
+            if (shouldHideCard) {
               card.classList.add('filtered-video');
               return;
             }
@@ -700,6 +797,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       processAllVideoCards();
       sendResponse({ success: true });
     }
+  }
+  return true;
+});
+
+// 添加新的消息监听
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'UPDATE_REPLY_RATIO_THRESHOLD') {
+    replyRatioThreshold = message.value / 100;
+    console.log(`${DEBUG_PREFIX} 评论率阈值已更新: ${message.value}%`);
+    processAllVideoCards();
+    sendResponse({ success: true });
+  } else if (message.type === 'TOGGLE_HOT_REPLY') {
+    enableHotReply = message.enabled;
+    console.log(`${DEBUG_PREFIX} 热评判断已${enableHotReply ? '开启' : '关闭'}`);
+    processAllVideoCards();
+    sendResponse({ success: true });
   }
   return true;
 });

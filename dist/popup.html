@@ -177,6 +177,20 @@
     </span>
     <button id="saveLikeRatio" class="save-btn">保存</button>
   </div>
+  <div class="status">
+    <span>评论率阈值: 
+      <input type="number" id="replyRatioThreshold" min="0" max="100" step="0.1" style="width: 60px;">
+      <span>%</span>
+    </span>
+    <button id="saveReplyRatio" class="save-btn">保存</button>
+  </div>
+  <div class="status">
+    <span>热评数量判断: <span id="hotReplyStatus">关闭</span></span>
+    <label class="switch">
+      <input type="checkbox" id="toggleHotReply">
+      <span class="slider"></span>
+    </label>
+  </div>
   <div class="status keyword-input">
     <span>标题关键词:</span>
     <div class="keyword-container">
