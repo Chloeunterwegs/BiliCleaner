@@ -25,16 +25,59 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* 基础过滤样式 */
 .filtered-video {
   display: none !important;
 }
 
+/* 视频卡片网格布局 */
+.feed-card, 
+.bili-feed {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+  gap: 20px !important;
+  padding: 0 20px !important;
+  width: 100% !important;
+  position: relative !important;
+}
+
+/* 正常视频卡片样式 */
+.bili-video-card:not(.filtered-video) {
+  margin: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  position: relative !important;
+  transition: transform 0.3s ease-out !important;
+}
+
+/* 前三个被过滤的视频卡片 */
+.feed-card > .bili-video-card.filtered-video:nth-child(-n+3),
+.bili-feed > .bili-video-card.filtered-video:nth-child(-n+3) {
+  position: absolute !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  transform: translateY(-100%) scaleY(0) !important;
+  transition: all 0.3s ease-out !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+/* 后续卡片上移效果 */
+.feed-card > .bili-video-card.filtered-video:nth-child(-n+3) ~ .bili-video-card:not(.filtered-video),
+.bili-feed > .bili-video-card.filtered-video:nth-child(-n+3) ~ .bili-video-card:not(.filtered-video) {
+  transform: translateY(-100%) !important;
+}
+
+/* 其他 UI 元素 */
 .video-quality-badge {
   position: absolute;
   top: 8px;
   right: 8px;
   padding: 2px 8px;
   border-radius: 4px;
+  background: rgba(251, 114, 153, 0.9);
   color: white;
   font-size: 12px;
   z-index: 2;

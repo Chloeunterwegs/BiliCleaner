@@ -110,6 +110,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       chrome.tabs.sendMessage(tab.id, { type: 'toggleNav', value: hideNav });
     }
   });
+  
+  // 初始化点赞比设置
+  await initializeLikeRatioThreshold();
+  await initializeKeywordsFilter();
 });
 
 // 添加状态更新函数
@@ -117,5 +121,117 @@ function updateHideNavStatus(hidden: boolean) {
   if (hideNavStatus) {
     hideNavStatus.textContent = hidden ? '开启' : '关闭';
     hideNavStatus.style.color = hidden ? '#276749' : '#9b2c2c';
+  }
+}
+
+// 添加点赞比设置的逻辑
+async function initializeLikeRatioThreshold() {
+  const { likeRatioThreshold = 3 } = await chrome.storage.local.get('likeRatioThreshold');
+  const input = document.getElementById('likeRatioThreshold') as HTMLInputElement;
+  if (input) {
+    input.value = likeRatioThreshold.toString();
+  }
+
+  // 添加保存按钮事件监听
+  const saveBtn = document.getElementById('saveLikeRatio');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const newThreshold = parseFloat(input.value);
+      if (isNaN(newThreshold) || newThreshold < 0 || newThreshold > 100) {
+        alert('请输入0-100之间的有效数值');
+        return;
+      }
+
+      await chrome.storage.local.set({ likeRatioThreshold: newThreshold });
+      
+      // 通知内容脚本更新阈值
+      const tabs = await chrome.tabs.query({ 
+        active: true, 
+        currentWindow: true,
+        url: "*://*.bilibili.com/*"
+      });
+
+      if (tabs[0]?.id) {
+        try {
+          await chrome.tabs.sendMessage(tabs[0].id, { 
+            type: 'UPDATE_LIKE_RATIO_THRESHOLD',
+            value: newThreshold
+          });
+        } catch (error) {
+          console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
+        }
+      }
+    });
+  }
+}
+
+// 添加关键词设置的初始化函数
+async function initializeKeywordsFilter() {
+  const { titleKeywords = '', authorKeywords = '' } = await chrome.storage.local.get(['titleKeywords', 'authorKeywords']);
+  
+  const titleInput = document.getElementById('titleKeywords') as HTMLInputElement;
+  const authorInput = document.getElementById('authorKeywords') as HTMLInputElement;
+  
+  if (titleInput) {
+    titleInput.value = titleKeywords;
+  }
+  if (authorInput) {
+    authorInput.value = authorKeywords;
+  }
+
+  // 添加标题关键词保存按钮事件监听
+  const saveTitleBtn = document.getElementById('saveTitleKeywords');
+  if (saveTitleBtn) {
+    saveTitleBtn.addEventListener('click', async () => {
+      const keywords = titleInput.value.trim();
+      await chrome.storage.local.set({ titleKeywords: keywords });
+      
+      // 通知内容脚本更新关键词
+      const tabs = await chrome.tabs.query({ 
+        active: true, 
+        currentWindow: true,
+        url: "*://*.bilibili.com/*"
+      });
+
+      if (tabs[0]?.id) {
+        try {
+          await chrome.tabs.sendMessage(tabs[0].id, { 
+            type: 'UPDATE_KEYWORDS',
+            target: 'title',
+            value: keywords
+          });
+        } catch (error) {
+          console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
+        }
+      }
+    });
+  }
+
+  // 添加作者关键词保存按钮事件监听
+  const saveAuthorBtn = document.getElementById('saveAuthorKeywords');
+  if (saveAuthorBtn) {
+    saveAuthorBtn.addEventListener('click', async () => {
+      const keywords = authorInput.value.trim();
+      await chrome.storage.local.set({ authorKeywords: keywords });
+      
+      // 通知内容脚本更新关键词
+      const tabs = await chrome.tabs.query({ 
+        active: true, 
+        currentWindow: true,
+        url: "*://*.bilibili.com/*"
+      });
+
+      if (tabs[0]?.id) {
+        try {
+          await chrome.tabs.sendMessage(tabs[0].id, { 
+            type: 'UPDATE_KEYWORDS',
+            target: 'author',
+            value: keywords
+          });
+        } catch (error) {
+          console.log(`${DEBUG_PREFIX} 页面未准备好:`, error);
+        }
+      }
+    });
   }
 } 

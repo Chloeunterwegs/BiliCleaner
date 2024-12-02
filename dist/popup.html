@@ -67,6 +67,28 @@
     input:checked + .slider:before {
       transform: translateX(26px);
     }
+    .save-btn {
+      background: #FB7299;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .save-btn:hover {
+      opacity: 0.9;
+    }
+    input[type="number"] {
+      padding: 4px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    input[type="text"] {
+      padding: 4px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -83,6 +105,25 @@
       <input type="checkbox" id="toggleNav">
       <span class="slider"></span>
     </label>
+  </div>
+  <div class="status">
+    <span>点赞率阈值: 
+      <input type="number" id="likeRatioThreshold" min="0" max="100" step="0.1" style="width: 60px;">
+      <span>%</span>
+    </span>
+    <button id="saveLikeRatio" class="save-btn">保存</button>
+  </div>
+  <div class="status">
+    <span>标题关键词: 
+      <input type="text" id="titleKeywords" placeholder="用逗号分隔" style="width: 120px;">
+    </span>
+    <button id="saveTitleKeywords" class="save-btn">保存</button>
+  </div>
+  <div class="status">
+    <span>作者关键词: 
+      <input type="text" id="authorKeywords" placeholder="用逗号分隔" style="width: 120px;">
+    </span>
+    <button id="saveAuthorKeywords" class="save-btn">保存</button>
   </div>
   <div class="stats">
     已处理视频: <span id="processedCount">0</span><br>

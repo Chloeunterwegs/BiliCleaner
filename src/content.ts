@@ -8,6 +8,9 @@ let isNavHidden = false;
 let isLoading = false;
 let noMoreContent = false;
 let visibleCardCount = 0;
+let likeRatioThreshold = 0.03; // 默认3%
+let titleKeywords: string[] = [];
+let authorKeywords: string[] = [];
 
 // 添加更新统计函数
 async function updateStats(isFiltered: boolean) {
@@ -31,15 +34,8 @@ async function updateStats(isFiltered: boolean) {
 
 // 添加新的过滤规则
 function shouldHideContent(element: Element): boolean {
-  console.log(`${DEBUG_PREFIX} 开始检查元素:`, {
-    element,
-    classes: element.className,
-    attributes: Array.from(element.attributes).map(attr => `${attr.name}=${attr.value}`)
-  });
-
   // 检查数据属性
   if (element.getAttribute('data-v-fb1914c6')) {
-    console.log(`${DEBUG_PREFIX} 命中数据属性过滤规则: data-v-fb1914c6`);
     return true;
   }
 
@@ -53,12 +49,7 @@ function shouldHideContent(element: Element): boolean {
   ];
 
   for (const selector of adIndicators) {
-    const match = element.querySelector(selector);
-    if (match) {
-      console.log(`${DEBUG_PREFIX} 命中广告标记:`, {
-        selector,
-        matchedElement: match
-      });
+    if (element.querySelector(selector)) {
       return true;
     }
   }
@@ -71,21 +62,18 @@ function shouldHideContent(element: Element): boolean {
     'use[href*="channel-live"]',
     'use[href*="channel-documentary"]',
     'use[href*="channel-manhua"]',
+    'use[href*="channel-tv"]',
     '[href*="bangumi"]',
     '[href*="cheese"]',
     '[href*="variety"]',
-    '[href*="manga.bilibili.com"]'
+    '[href*="manga.bilibili.com"]',
+    '[href*="tv.bilibili.com"]'
   ];
 
   // 检查基本选择器
   for (const selector of categoryIndicators) {
     const match = element.querySelector(selector);
     if (match) {
-      console.log(`${DEBUG_PREFIX} 命中分类标记:`, {
-        selector,
-        matchedElement: match,
-        href: match.getAttribute('href')
-      });
       return true;
     }
   }
@@ -94,11 +82,7 @@ function shouldHideContent(element: Element): boolean {
   const titleElement = element.querySelector('.badge .floor-title');
   if (titleElement) {
     const text = titleElement.textContent || '';
-    if (text.includes('纪录片') || text.includes('漫画')) {
-      console.log(`${DEBUG_PREFIX} 命中标题文本:`, {
-        text,
-        element: titleElement
-      });
+    if (text.includes('纪录片') || text.includes('漫画') || text.includes('电视剧')) {
       return true;
     }
   }
@@ -115,10 +99,6 @@ function shouldHideContent(element: Element): boolean {
   for (const selector of liveIndicators) {
     const match = element.querySelector(selector);
     if (match) {
-      console.log(`${DEBUG_PREFIX} 命中直播标记:`, {
-        selector,
-        matchedElement: match
-      });
       return true;
     }
   }
@@ -126,11 +106,29 @@ function shouldHideContent(element: Element): boolean {
   // 检查直播文本
   const badgeElement = element.querySelector('.badge');
   if (badgeElement && badgeElement.textContent?.includes('直播')) {
-    console.log(`${DEBUG_PREFIX} 命中直播文本`);
     return true;
   }
 
-  console.log(`${DEBUG_PREFIX} 元素通过检查，不需要隐藏`);
+  // 检查标题关键词
+  const titleEl = element.querySelector('.bili-video-card__info--tit');
+  if (titleEl && titleKeywords.length > 0) {
+    const title = titleEl.textContent || '';
+    if (titleKeywords.some(keyword => title.includes(keyword))) {
+      console.log(`${DEBUG_PREFIX} 标题包含关键词，已过滤:`, title);
+      return true;
+    }
+  }
+
+  // 检查作者关键词
+  const authorEl = element.querySelector('.bili-video-card__info--author');
+  if (authorEl && authorKeywords.length > 0) {
+    const author = authorEl.textContent || '';
+    if (authorKeywords.some(keyword => author.includes(keyword))) {
+      console.log(`${DEBUG_PREFIX} 作者包含关键词，已过滤:`, author);
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -140,27 +138,10 @@ styleSheet.textContent = `
   .recommended-swipe {
     display: none !important;
   }
-
-  .filtered-video {
-    display: none !important;
-  }
-
-  /* 使用grid布局自动填充空缺 */
-  .feed-card, .bili-feed {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
-    gap: 20px !important;
-    padding: 0 20px !important;
-  }
-
-  .bili-video-card:not(.filtered-video) {
-    margin: 0 !important;
-    width: 100% !important;
-  }
 `;
 document.head.appendChild(styleSheet);
 
-// 添加视频信息输出函数
+// 修改视频信息输出函数
 function logVideoInfo(videoCard: Element, reason: string, metrics?: { 
   viewCount?: number, 
   likeCount?: number, 
@@ -173,20 +154,28 @@ function logVideoInfo(videoCard: Element, reason: string, metrics?: {
   let logStyle = 'color: #999; font-size: 12px;';
   let prefix = '🎬';
 
-  if (reason.includes('隐藏')) {
-    logStyle = 'color: #f56c6c; font-size: 12px;';
-    prefix = '❌';
-  } else if (reason.includes('合格')) {
-    logStyle = 'color: #67c23a; font-size: 12px;';
-    prefix = '✅';
+  // 格式化数字
+  const formatNumber = (num: number) => {
+    if (num >= 10000) {
+      return (num / 10000).toFixed(1) + '万';
+    }
+    return num.toString();
+  };
+
+  // 构建数据字符串
+  let statsStr = '';
+  if (metrics) {
+    statsStr = `\n   数据统计:
+    ▶️ 播放量: ${formatNumber(metrics.viewCount || 0)}
+    👍 点赞数: ${formatNumber(metrics.likeCount || 0)}
+    📊 点赞率: ${((metrics.likeRatio || 0) * 100).toFixed(2)}%`;
   }
 
   console.log(
     `%c${prefix} ${title}\n` +
     `   UP主: ${up}\n` +
-    `   链接: ${link}\n` +
-    `   状态: ${reason}` +
-    (metrics ? `\n   数据: 播放${metrics.viewCount} 点赞${metrics.likeCount} 点赞率${(metrics.likeRatio! * 100).toFixed(2)}%` : ''),
+    `   链接: ${link}` +
+    statsStr,
     logStyle
   );
 }
@@ -206,33 +195,103 @@ function debounce<T extends (...args: any[]) => void>(
 // 使用 Set 缓存已处理的元素
 const processedCards = new Set<Element>();
 
-// 修改处理视频卡片的方法
-function processVideoCard(card: Element) {
-  if (!isEnabled || processedCards.has(card)) {
+// 获取视频数据的函数
+async function getVideoMetrics(bvid: string): Promise<{ view: number, like: number } | null> {
+  try {
+    const response = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+    const data = await response.json();
+    
+    if (data.code === 0) {
+      return {
+        view: data.data.stat.view,
+        like: data.data.stat.like
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('获取视频数据失败:', error);
+    return null;
+  }
+}
+
+// 修改检查视频质量的函数
+async function isQualityVideo(element: Element): Promise<boolean> {
+  const link = element.querySelector('a[href*="/video/"]')?.getAttribute('href');
+  if (!link) return false;
+  
+  const bvid = link.match(/\/video\/(BV[\w]+)/)?.[1];
+  if (!bvid) return false;
+
+  const metrics = await getVideoMetrics(bvid);
+  if (!metrics) return false;
+
+  // 计算点赞率
+  const likeRatio = metrics.like / metrics.view;
+  const passQuality = likeRatio >= 0.03;
+
+  // 只输出视频数据
+  console.log(`${DEBUG_PREFIX} 视频数据:`, {
+    标题: element.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
+    UP主: element.querySelector('.bili-video-card__info--author')?.textContent?.trim(),
+    播放量: metrics.view.toLocaleString(),
+    点赞数: metrics.like.toLocaleString(),
+    点赞率: `${(likeRatio * 100).toFixed(2)}%`,
+    通过筛选: passQuality ? '✅' : '❌'
+  });
+
+  return passQuality;
+}
+
+// 修改视频处理函数
+async function processVideoCard(element: Element) {
+  // 如果已经处理过，直接返回
+  if (element.hasAttribute('data-processed')) {
+    return;
+  }
+  element.setAttribute('data-processed', 'true');
+
+  // 1. 首先检查是否是需要直接过滤的内容（广告、番剧等）
+  if (shouldHideContent(element)) {
+    element.classList.add('filtered-video');
+    return; // 如果是广告等内容，直接返回，不需要检查点赞比
+  }
+
+  // 2. 然后检查点赞比
+  const link = element.querySelector('a[href*="/video/"]')?.getAttribute('href');
+  if (!link) {
+    element.classList.add('filtered-video'); // 如果获取不到链接，也隐藏
+    return;
+  }
+  
+  const bvid = link.match(/\/video\/(BV[\w]+)/)?.[1];
+  if (!bvid) {
+    element.classList.add('filtered-video');
     return;
   }
 
-  console.log(`${DEBUG_PREFIX} 开始处理视频卡片:`, {
-    card,
-    title: card.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
-    uploader: card.querySelector('.bili-video-card__info--author')?.textContent?.trim()
-  });
-
-  if (shouldHideContent(card)) {
-    // 不是用 display: none，而是直接移除元素
-    card.remove();
-    processedCards.add(card);
-    filteredCount++;
-    console.log(`${DEBUG_PREFIX} 已移除内容:`, {
-      card,
-      reason: '匹配过滤规则'
-    });
-  } else {
-    processedCards.add(card);
-    processedCount++;
+  const metrics = await getVideoMetrics(bvid);
+  if (!metrics) {
+    element.classList.add('filtered-video');
+    return;
   }
 
-  updateStats(true);
+  // 计算点赞率并判断
+  const likeRatio = metrics.like / metrics.view;
+  
+  // 输出视频数据
+  console.log(`${DEBUG_PREFIX} 视频数据:`, {
+    标题: element.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
+    UP主: element.querySelector('.bili-video-card__info--author')?.textContent?.trim(),
+    播放量: metrics.view.toLocaleString(),
+    点赞数: metrics.like.toLocaleString(),
+    点赞率: `${(likeRatio * 100).toFixed(2)}%`,
+    通过筛选: likeRatio >= likeRatioThreshold ? '✅' : '❌'
+  });
+
+  if (likeRatio < likeRatioThreshold) {
+    console.log(`${DEBUG_PREFIX} 低于${(likeRatioThreshold * 100).toFixed(1)}%，予以隐藏`);
+    element.classList.add('filtered-video');
+  }
 }
 
 // 修改 checkNeedMoreContent 函数
@@ -338,84 +397,90 @@ function processAllVideoCards() {
   requestAnimationFrame(processBatch);
 }
 
-// 修改 MutationObserver 回调
-const debouncedProcess = debounce((mutations: MutationRecord[]) => {
-  console.log(`${DEBUG_PREFIX} 检测到页面变化:`, {
-    mutationsCount: mutations.length,
-    timestamp: new Date().toISOString()
-  });
-
-  const newCards = new Set<Element>();
-
-  mutations.forEach(mutation => {
-    console.log(`${DEBUG_PREFIX} 处理变更:`, {
-      type: mutation.type,
-      addedNodes: mutation.addedNodes.length,
-      target: mutation.target
-    });
-
-    mutation.addedNodes.forEach(node => {
-      if (node instanceof Element) {
-        const cards = node.querySelectorAll<Element>([
-          '.bili-video-card:not([data-filtered])',
-          '.feed-card:not([data-filtered])',
-          '.floor-card:not([data-filtered])'
-        ].join(','));
-        
-        console.log(`${DEBUG_PREFIX} 找到新卡片:`, {
-          count: cards.length,
-          cards: Array.from(cards).map(card => ({
-            title: card.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
-            uploader: card.querySelector('.bili-video-card__info--author')?.textContent?.trim()
-          }))
-        });
-
-        cards.forEach(card => newCards.add(card));
-      }
-    });
-  });
-
-  if (newCards.size > 0) {
-    console.log(`${DEBUG_PREFIX} 开始处理新片:`, {
-      count: newCards.size,
-      timestamp: new Date().toISOString()
-    });
-
-    requestAnimationFrame(() => {
-      newCards.forEach(card => {
-        processVideoCard(card);
-        card.setAttribute('data-filtered', 'true');
-      });
-      
-      console.log(`${DEBUG_PREFIX} 完成新卡片处理:`, {
-        processedCount: processedCards.size,
-        timestamp: new Date().toISOString()
-      });
-
-      // 处理完新卡片后，检查是否需要加载更多
-      checkNeedMoreContent();
-    });
-  }
-}, 100);
-
-// 优化 observeVideoList 函数
+// 定义 observeVideoList 函数
 function observeVideoList() {
-  console.log(`${DEBUG_PREFIX} 启动内容监听器`);
-  
-  const observer = new MutationObserver(debouncedProcess);
-  
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: false
-  });
-  
-  console.log(`${DEBUG_PREFIX} 内容监听器已启动`);
+  const feedContainer = document.querySelector('.feed-card');
+  if (feedContainer) {
+    videoObserver.observe(feedContainer, {
+      childList: true,
+      subtree: true
+    });
+    console.log(`${DEBUG_PREFIX} 开始观察视频列表`);
+  }
 }
+
+// 修改 MutationObserver 的处理逻辑
+const videoObserver = new MutationObserver((mutations) => {
+  mutations.forEach(mutation => {
+    if (mutation.type === 'childList') {
+      mutation.addedNodes.forEach((node) => {
+        if (node instanceof HTMLElement) {
+          // 1. 处理当前节点
+          if (shouldHideContent(node)) {
+            node.classList.add('filtered-video');
+            return;
+          }
+
+          // 2. 处理所有新添加的卡片
+          const allCards = node.querySelectorAll('.bili-video-card, .floor-single-card');
+          allCards.forEach(async (card) => {
+            if (card.hasAttribute('data-processed')) {
+              return;
+            }
+            card.setAttribute('data-processed', 'true');
+
+            // 先检查是否需要直接隐藏
+            if (shouldHideContent(card)) {
+              card.classList.add('filtered-video');
+              return;
+            }
+
+            // 如果是普通视频卡片，检查点赞率
+            if (card.classList.contains('bili-video-card')) {
+              const link = card.querySelector('a[href*="/video/"]')?.getAttribute('href');
+              if (!link) {
+                card.classList.add('filtered-video');
+                return;
+              }
+              
+              const bvid = link.match(/\/video\/(BV[\w]+)/)?.[1];
+              if (!bvid) {
+                card.classList.add('filtered-video');
+                return;
+              }
+
+              const metrics = await getVideoMetrics(bvid);
+              if (!metrics) {
+                card.classList.add('filtered-video');
+                return;
+              }
+
+              const likeRatio = metrics.like / metrics.view;
+              
+              // 输出视频数据
+              console.log(`${DEBUG_PREFIX} 视频数据:`, {
+                标题: card.querySelector('.bili-video-card__info--tit')?.textContent?.trim(),
+                UP主: card.querySelector('.bili-video-card__info--author')?.textContent?.trim(),
+                播放量: metrics.view.toLocaleString(),
+                点赞数: metrics.like.toLocaleString(),
+                点赞率: `${(likeRatio * 100).toFixed(2)}%`,
+                通过筛选: likeRatio >= likeRatioThreshold ? '✅' : '❌'
+              });
+
+              if (likeRatio < likeRatioThreshold) {
+                console.log(`${DEBUG_PREFIX} 低于${(likeRatioThreshold * 100).toFixed(1)}%，予以隐藏`);
+                card.classList.add('filtered-video');
+              }
+            }
+          });
+        }
+      });
+    }
+  });
+});
 
 // 合并后的初始化函数
 async function init() {
-  // 检查是否是目标页面
   if (!window.location.pathname.match(/^\/($|index.html|video|space|search)/)) {
     console.log(`${DEBUG_PREFIX} 不是目标页面，插件不工作`);
     return;
@@ -427,12 +492,43 @@ async function init() {
   const { hideNav = false } = await chrome.storage.local.get('hideNav');
   isNavHidden = hideNav;
   toggleNav(isNavHidden);
-  
-  // 初始处理已有的视频卡片
+
+  // 处理所有已存在的卡片
   processAllVideoCards();
+
+  // 启动观察器，监听整个页面
+  videoObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  // 添加滚动监听，处理懒加载
+  window.addEventListener('scroll', debounce(() => {
+    if (isEnabled) {
+      const unprocessedCards = document.querySelectorAll('.bili-video-card:not([data-processed]), .floor-single-card:not([data-processed])');
+      unprocessedCards.forEach(card => {
+        if (card instanceof HTMLElement) {
+          processVideoCard(card);
+        }
+      });
+    }
+  }, 200));
+
+  // 获取点赞率阈值
+  const { likeRatioThreshold: threshold = 3 } = await chrome.storage.local.get('likeRatioThreshold');
+  likeRatioThreshold = threshold / 100; // 转换为小数
+
+  // 初始化关键词
+  const { titleKeywords: title = '', authorKeywords: author = '' } = 
+    await chrome.storage.local.get(['titleKeywords', 'authorKeywords']);
   
-  // 启动观察器
-  observeVideoList();
+  titleKeywords = title.split(',')
+    .map((k: string) => k.trim())
+    .filter((k: string) => k);
+  
+  authorKeywords = author.split(',')
+    .map((k: string) => k.trim())
+    .filter((k: string) => k);
 }
 
 // 监听来自 popup 的消
@@ -521,49 +617,39 @@ function toggleNav(hide: boolean) {
   }
 }
 
-// 修改 MutationObserver
-const observer = new MutationObserver((mutations) => {
-  for (const mutation of mutations) {
-    if (mutation.type === 'childList') {
-      mutation.addedNodes.forEach((node) => {
-        if (node instanceof HTMLElement) {
-          if (shouldHideContent(node)) {
-            node.remove();
-          }
-          
-          // 处理子节点
-          const cards = node.querySelectorAll('.bili-video-card, .floor-single-card');
-          cards.forEach(card => {
-            if (shouldHideContent(card)) {
-              card.remove();
-            }
-          });
-        }
-      });
-    }
-  }
-});
-
-// 配置 observer
-const observerConfig = {
-  childList: true,
-  subtree: true
-};
-
-// 开始观察
-observer.observe(document.body, observerConfig);
-
-// 初始处理
-document.querySelectorAll('.bili-video-card, .floor-single-card').forEach(card => {
-  if (shouldHideContent(card)) {
-    (card as HTMLElement).style.display = 'none';
-  }
-});
-
 // 添加滚动事件监听
 window.addEventListener('scroll', debounce(() => {
   if (isEnabled) {
     checkNeedMoreContent();
   }
 }, 200));
+
+// 添加新的消息监听
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'UPDATE_LIKE_RATIO_THRESHOLD') {
+    likeRatioThreshold = message.value / 100;
+    console.log(`${DEBUG_PREFIX} 点赞率阈值已更新: ${message.value}%`);
+    // 重新处理所有视频
+    processAllVideoCards();
+    sendResponse({ success: true });
+  }
+  return true;
+});
+
+// 添加新的消息监听
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'UPDATE_KEYWORDS') {
+    if (message.target === 'title') {
+      titleKeywords = message.value.split(',').map((k: string) => k.trim()).filter((k: string) => k);
+      console.log(`${DEBUG_PREFIX} 标题关键词已更新:`, titleKeywords);
+    } else if (message.target === 'author') {
+      authorKeywords = message.value.split(',').map((k: string) => k.trim()).filter((k: string) => k);
+      console.log(`${DEBUG_PREFIX} 作者关键词已更新:`, authorKeywords);
+    }
+    // 重新处理所有视频
+    processAllVideoCards();
+    sendResponse({ success: true });
+  }
+  return true;
+});
   
